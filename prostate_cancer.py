@@ -6,6 +6,8 @@ from sklearn.preprocessing import MinMaxScaler
 from collections import Counter
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis 
+from sklearn import svm                                  
+
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.ensemble import IsolationForest
 
@@ -26,7 +28,7 @@ from sklearn.multiclass import OneVsRestClassifier, OneVsOneClassifier
 from imblearn.over_sampling import SMOTE
 from imblearn.combine import SMOTEENN
 
-
+MODEL = svm.SVC(kernel='linear')
 def load_genomic_data(filename):
      # load the geneomic data
     genomic_df = pd.read_csv(filename)
@@ -89,7 +91,7 @@ def remove_low_variance_feature(X):
     return sel.fit_transform(X)
     
     
-def feature_selection(X_train_norm, y_train, X_test_norm, score_function):
+def filter_feature_selection(X_train_norm, y_train, X_test_norm, score_function):
     best_k = SelectKBest(score_func=score_function, k=300)
     fit = best_k.fit(X_train_norm, y_train)
     X_train_fs = fit.transform(X_train_norm)
@@ -107,16 +109,19 @@ def feature_selection(X_train_norm, y_train, X_test_norm, score_function):
     return X_train_fs, X_test_fs
 
 def forward_feature_selecion(X_train_fs, y_train, X_test_fs):
-    sfs = SFS(LinearDiscriminantAnalysis(), 
+    sfs = SFS(MODEL, 
 		k_features=13,
 		forward=True,
 		floating = False,
-		scoring = 'r2',
-		cv = 0)
+		scoring = 'accuracy',
+		cv = 5)
     fit = sfs.fit(X_train_fs, y_train)
     X_train_wfs = fit.transform(X_train_fs)
     X_test_wfs = fit.transform(X_test_fs)
-    print(sfs.k_feature_names_)     # to get the final set of features
+    
+    best = sfs.k_feature_names_     # to get the final set of features
+    brint(best)
+
     return X_train_wfs, X_test_wfs
 
     
@@ -153,24 +158,20 @@ sme = SMOTEENN(random_state=42,smote=SMOTE(random_state=42, k_neighbors=1))
 X, y = sme.fit_resample(X, y)
 print('Resampling of dataset using SMOTEENN %s' % Counter(y), '\n')
 
-featureVoting = {}
+X_train, X_test, y_train, y_test = train_test_split(X, y, train_size = 0.7, random_state=42)
 
-#K-Fold cross validation 
-kf = KFold(n_splits = 10, shuffle=True, random_state=23)
+X_train_norm, X_test_norm = prepare_inputs(X_train, X_test)
+X_train_fs, X_test_fs = filter_feature_selection(X_train_norm, y_train, X_test_norm, chi2)
+X_train_wfs, X_test_wfs = forward_feature_selecion(X_train_fs, y_train, X_test_fs)
 
 Accuracy_list =  [0, 0, 0, 0, 0]
-for train_index, test_index in kf.split(X):
-    X_train, X_test, y_train, y_test = X.iloc[train_index], X.iloc[test_index], y.iloc[train_index], y.iloc[test_index]
-    X_train_norm, X_test_norm = prepare_inputs(X_train, X_test)
-    X_train_fs, X_test_fs = feature_selection(X_train_norm, y_train, X_test_norm, chi2)
-    X_train_wfs, X_test_wfs = forward_feature_selecion(X_train_fs, y_train, X_test_fs)
-    get_performace_measures(LinearDiscriminantAnalysis(), X_train_wfs, X_test_wfs, y_train, y_test, Accuracy_list)
+get_performace_measures(MODEL, X_train_wfs, X_test_wfs, y_train, y_test, Accuracy_list)
 
     
 print("-----------------------------------------------")
 # print("Accuracy: ", round(mean(Accuracy_list), 4))
 for i, a in enumerate(Accuracy_list):
-    print("Accuracy of", 5+i, "vs Rest: ", round(a/5, 4) )
+    print("Accuracy of", 6+i, "vs Rest: ", round(a, 4) )
 print("-----------------------------------------------")
 
 
